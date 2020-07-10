@@ -20,28 +20,28 @@
 #define LOG_NDEBUG 0
 
 // Log detailed debug messages about each inbound event notification to the dispatcher.
-#define DEBUG_INBOUND_EVENT_DETAILS 0
+// #define DEBUG_INBOUND_EVENT_DETAILS 0
 
 // Log detailed debug messages about each outbound event processed by the dispatcher.
-#define DEBUG_OUTBOUND_EVENT_DETAILS 0
+// #define DEBUG_OUTBOUND_EVENT_DETAILS 0
 
 // Log debug messages about the dispatch cycle.
-#define DEBUG_DISPATCH_CYCLE 0
+// #define DEBUG_DISPATCH_CYCLE 0
 
 // Log debug messages about registrations.
-#define DEBUG_REGISTRATION 0
+// #define DEBUG_REGISTRATION 0
 
 // Log debug messages about input event injection.
-#define DEBUG_INJECTION 0
+// #define DEBUG_INJECTION 0
 
 // Log debug messages about input focus tracking.
-#define DEBUG_FOCUS 0
+// #define DEBUG_FOCUS 0
 
 // Log debug messages about the app switch latency optimization.
-#define DEBUG_APP_SWITCH 0
+// #define DEBUG_APP_SWITCH 0
 
 // Log debug messages about hover events.
-#define DEBUG_HOVER 0
+// #define DEBUG_HOVER 0
 
 #include "InputDispatcher.h"
 
@@ -1937,6 +1937,11 @@ void InputDispatcher::pokeUserActivityLocked(const EventEntry* eventEntry) {
             & InputDispatcher::doPokeUserActivityLockedInterruptible);
     commandEntry->eventTime = eventEntry->eventTime;
     commandEntry->userActivityEventType = eventType;
+    if (eventType == USER_ACTIVITY_EVENT_BUTTON) {
+        const KeyEntry* keyEntry = static_cast<const KeyEntry*>(eventEntry);
+        commandEntry->keyEntry = const_cast<KeyEntry*>(keyEntry);
+        keyEntry->refCount += 1;
+    }
 }
 
 void InputDispatcher::prepareDispatchCycleLocked(nsecs_t currentTime,
@@ -4425,7 +4430,20 @@ bool InputDispatcher::afterMotionEventLockedInterruptible(const sp<Connection>& 
 void InputDispatcher::doPokeUserActivityLockedInterruptible(CommandEntry* commandEntry) {
     mLock.unlock();
 
-    mPolicy->pokeUserActivity(commandEntry->eventTime, commandEntry->userActivityEventType);
+    int32_t keyCode = AKEYCODE_UNKNOWN;
+
+    if (commandEntry->userActivityEventType == USER_ACTIVITY_EVENT_BUTTON &&
+            commandEntry->keyEntry) {
+        keyCode = commandEntry->keyEntry->keyCode;
+    }
+
+    mPolicy->pokeUserActivity(commandEntry->eventTime, commandEntry->userActivityEventType,
+            keyCode);
+
+    if (commandEntry->userActivityEventType == USER_ACTIVITY_EVENT_BUTTON &&
+            commandEntry->keyEntry) {
+        commandEntry->keyEntry->release();
+    }
 
     mLock.lock();
 }
